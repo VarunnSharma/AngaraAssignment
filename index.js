@@ -4,12 +4,16 @@ const path = require("path");
 const multer = require("multer");
 const csv = require("csv-parser");
 const express = require("express");
-const app = express();
-
 const zlib = require("zlib");
 
+const app = express();
 const gzip = zlib.createGzip();
 const PORT = 5000;
+
+const uploads = multer({
+  storage: storage,
+});
+let structure = { folder: "", files: [] };
 
 fs.mkdir("./uploadedFiles", function (err) {
   if (err) {
@@ -27,7 +31,40 @@ fs.mkdir("./compressedFiles", function (err) {
   }
 });
 
-let structure = { folder: "", files: [] };
+app.use(bodyparser.json());
+app.use(
+  bodyparser.urlencoded({
+    extended: true,
+  })
+);
+
+app.listen(PORT, () => console.log(`Node app serving on port: ${PORT}`));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "/UploadFile.html"));
+});
+
+app.get("/import-csv", (req, res) => {
+  res.send(JSON.stringify(csvDataColl));
+});
+
+app.post("/import-csv", uploads.array("files"), (req, res) => {
+  req.files.forEach((file) => {
+    uploadCsv(path.join(__dirname, "/uploadedFiles/", file.originalname));
+  });
+  res.status({
+    status: `data for ${req.files.length} files added successfully`,
+  });
+});
+
+const storage = multer.diskStorage({
+  destination: (req, file, callBack) => {
+    callBack(null, path.join(__dirname, "/uploadedFiles/"));
+  },
+  filename: (req, file, callBack) => {
+    callBack(null, file.originalname);
+  },
+});
 
 async function compressNewFiles(workingDir) {
   const items = await fs.readdirSync(workingDir, { withFileTypes: true });
@@ -61,19 +98,6 @@ async function getDirDetails(workingDir) {
   });
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, callBack) => {
-    callBack(null, path.join(__dirname, "/uploadedFiles/"));
-  },
-  filename: (req, file, callBack) => {
-    callBack(null, file.originalname);
-  },
-});
-
-const uploads = multer({
-  storage: storage,
-});
-
 let csvDataColl = [];
 function uploadCsv(uriFile) {
   fs.createReadStream(uriFile)
@@ -100,30 +124,3 @@ function getData(data) {
   getDirDetails("UploadedFiles");
   compressNewFiles("UploadedFiles");
 }
-
-app.use(express.static("./public"));
-app.use(bodyparser.json());
-app.use(
-  bodyparser.urlencoded({
-    extended: true,
-  })
-);
-
-app.listen(PORT, () => console.log(`Node app serving on port: ${PORT}`));
-
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "/UploadFile.html"));
-});
-
-app.get("/import-csv", (req, res) => {
-  res.send(JSON.stringify(csvDataColl));
-});
-
-app.post("/import-csv", uploads.array("files"), (req, res) => {
-  req.files.forEach((file) => {
-    uploadCsv(path.join(__dirname, "/uploadedFiles/", file.originalname));
-  });
-  res.status({
-    status: `data for ${req.files.length} files added successfully`,
-  });
-});
